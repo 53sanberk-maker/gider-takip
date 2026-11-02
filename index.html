@@ -1,0 +1,1601 @@
+<!DOCTYPE html>
+<html lang="tr" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Ortak Gider Takibi</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://unpkg.com/lucide@0.460.0/dist/umd/lucide.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'] }
+        }
+      }
+    }
+  </script>
+
+  <style type="text/tailwindcss">
+    @layer components {
+      .card { @apply bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-sm; }
+      .field-label { @apply block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5; }
+      .field { @apply w-full bg-white dark:bg-slate-950 border border-slate-300 dark:border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-500 transition; }
+      .btn { @apply inline-flex items-center justify-center gap-2 rounded-lg px-3.5 py-2 text-sm font-medium transition active:scale-[0.99]; }
+      .btn-primary { @apply btn bg-indigo-600 text-white hover:bg-indigo-700 shadow-sm; }
+      .btn-secondary { @apply btn bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800; }
+      .btn-icon { @apply inline-flex items-center justify-center w-9 h-9 rounded-lg border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800 transition; }
+      .modal-backdrop { @apply fixed inset-0 z-50 hidden items-center justify-center bg-slate-900/50 backdrop-blur-sm px-4; }
+      .modal-panel { @apply card w-full max-w-sm p-5 space-y-4 shadow-md; }
+    }
+    body { font-family: 'Inter', system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+    .modal-backdrop:not(.hidden) { display: flex; }
+    .custom-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+    .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
+    .dark .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; }
+    .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
+    input[type="date"]::-webkit-calendar-picker-indicator { opacity: .6; }
+    .dark input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(1); }
+  </style>
+</head>
+
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-900 dark:text-slate-100 min-h-screen">
+
+  <!-- SIDEBAR (desktop) -->
+  <aside class="hidden lg:flex fixed inset-y-0 left-0 w-60 flex-col bg-white dark:bg-slate-900 border-r border-slate-200 dark:border-slate-800 z-30">
+    <div class="h-16 px-5 flex items-center gap-3 border-b border-slate-200 dark:border-slate-800">
+      <div class="w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center">
+        <i data-lucide="wallet" class="w-4 h-4"></i>
+      </div>
+      <div class="leading-tight">
+        <p class="text-sm font-semibold">Ortak Giderler</p>
+        <p class="text-[11px] text-slate-500 dark:text-slate-400">Harcama takibi</p>
+      </div>
+    </div>
+
+    <nav class="flex-1 p-3 space-y-1">
+      <button data-view="overview" data-nav="side" onclick="switchView('overview')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition">
+        <i data-lucide="layout-dashboard" class="w-4 h-4"></i> Özet
+      </button>
+      <button data-view="add" data-nav="side" onclick="switchView('add')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition">
+        <i data-lucide="plus-circle" class="w-4 h-4"></i> Ekle
+      </button>
+      <button data-view="charts" data-nav="side" onclick="switchView('charts')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition">
+        <i data-lucide="bar-chart-3" class="w-4 h-4"></i> Grafikler
+      </button>
+      <button data-view="history" data-nav="side" onclick="switchView('history')" class="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition">
+        <i data-lucide="history" class="w-4 h-4"></i> Geçmiş
+      </button>
+    </nav>
+
+    <div class="p-4 border-t border-slate-200 dark:border-slate-800">
+      <p class="text-[11px] font-medium text-slate-500 dark:text-slate-400 flex items-center gap-2" id="syncStatus">
+        <span class="w-2 h-2 rounded-full bg-amber-500"></span> Bağlanıyor...
+      </p>
+    </div>
+  </aside>
+
+  <!-- MAIN COLUMN -->
+  <div class="lg:pl-60">
+
+    <!-- TOP BAR -->
+    <header class="sticky top-0 z-20 bg-white/85 dark:bg-slate-900/85 backdrop-blur border-b border-slate-200 dark:border-slate-800">
+      <div class="max-w-6xl mx-auto h-16 px-4 lg:px-8 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="lg:hidden w-8 h-8 rounded-lg bg-indigo-600 text-white flex items-center justify-center shrink-0">
+            <i data-lucide="wallet" class="w-4 h-4"></i>
+          </div>
+          <h1 id="pageTitle" class="text-base lg:text-lg font-semibold tracking-tight truncate">Özet</h1>
+        </div>
+
+        <div class="flex items-center gap-2">
+          <!-- Active user -->
+          <div class="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg">
+            <button id="btnUser1" onclick="setActiveUser(window.state.user1)" class="px-3 py-1.5 rounded-md text-xs font-semibold transition flex items-center gap-1.5">
+              <i data-lucide="user" class="w-3.5 h-3.5"></i><span id="lblBtnUser1">Berk</span>
+            </button>
+            <button id="btnUser2" onclick="setActiveUser(window.state.user2)" class="px-3 py-1.5 rounded-md text-xs font-semibold transition flex items-center gap-1.5">
+              <i data-lucide="user" class="w-3.5 h-3.5"></i><span id="lblBtnUser2">Asya</span>
+            </button>
+          </div>
+
+          <button onclick="copyShareLink()" class="btn-icon" title="Bağlantıyı paylaş"><i data-lucide="link" class="w-4 h-4"></i></button>
+          <button onclick="toggleTheme()" class="btn-icon" title="Tema değiştir"><span id="themeIcon"><i data-lucide="sun" class="w-4 h-4"></i></span></button>
+          <button onclick="openAdminModal()" class="btn-icon" title="Ayarlar"><i data-lucide="settings" class="w-4 h-4"></i></button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto px-4 lg:px-8 py-6 pb-28 lg:pb-10 space-y-6">
+
+      <!-- FILTER BAR (overview / charts / history) -->
+      <section id="filterBar" class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <!-- Person tabs -->
+        <div class="grid grid-cols-3 gap-0.5 bg-slate-200/70 dark:bg-slate-900 border border-transparent dark:border-slate-800 p-0.5 rounded-lg lg:w-auto">
+          <button id="tabBtn1" onclick="switchTab(1)" class="px-3 py-2 rounded-md text-xs font-semibold transition text-center">
+            <span class="flex items-center justify-center gap-1.5"><i data-lucide="user" class="w-3.5 h-3.5"></i><span id="tabLbl1">Berk</span></span>
+            <span id="tab1Badge" class="block text-[10px] font-normal opacity-70 mt-0.5">0 ₺</span>
+          </button>
+          <button id="tabBtn2" onclick="switchTab(2)" class="px-3 py-2 rounded-md text-xs font-semibold transition text-center">
+            <span class="flex items-center justify-center gap-1.5"><i data-lucide="user" class="w-3.5 h-3.5"></i><span id="tabLbl2">Asya</span></span>
+            <span id="tab2Badge" class="block text-[10px] font-normal opacity-70 mt-0.5">0 ₺</span>
+          </button>
+          <button id="tabBtn3" onclick="switchTab(3)" class="px-3 py-2 rounded-md text-xs font-semibold transition text-center">
+            <span class="flex items-center justify-center gap-1.5"><i data-lucide="users" class="w-3.5 h-3.5"></i><span>Ortak</span></span>
+            <span id="tab3Badge" class="block text-[10px] font-normal opacity-70 mt-0.5">0 ₺</span>
+          </button>
+        </div>
+
+        <!-- Time filter & Navigation -->
+        <div class="flex flex-wrap items-center gap-2">
+          <div class="flex items-center gap-1 overflow-x-auto custom-scrollbar pb-1 text-xs font-medium">
+            <button onclick="setTimeFilter('ALL')" id="tf_ALL" class="px-3 py-1.5 rounded-lg border whitespace-nowrap transition">Tümü</button>
+            <button onclick="setTimeFilter('WEEK')" id="tf_WEEK" class="px-3 py-1.5 rounded-lg border whitespace-nowrap transition">Hafta</button>
+            <button onclick="setTimeFilter('MONTH')" id="tf_MONTH" class="px-3 py-1.5 rounded-lg border whitespace-nowrap transition">Ay</button>
+          </div>
+          <!-- Prev / Next time navigation -->
+          <div id="timeNavContainer" class="hidden items-center gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg p-1">
+            <button onclick="shiftTimePeriod(-1)" class="btn-icon !w-7 !h-7 text-xs" title="Önceki dönem"><i data-lucide="chevron-left" class="w-3.5 h-3.5"></i></button>
+            <span id="timeRangeLabel" class="text-xs font-medium px-2 whitespace-nowrap text-slate-600 dark:text-slate-300"></span>
+            <button onclick="shiftTimePeriod(1)" class="btn-icon !w-7 !h-7 text-xs" title="Sonraki dönem"><i data-lucide="chevron-right" class="w-3.5 h-3.5"></i></button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ============ VIEW: OVERVIEW ============ -->
+      <div id="view-overview" class="space-y-6">
+
+        <section class="grid grid-cols-2 lg:grid-cols-4 gap-3 lg:gap-4">
+          <div class="card p-4">
+            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+              <span class="text-xs font-medium flex items-center gap-1.5"><i data-lucide="user" class="w-3.5 h-3.5 text-indigo-500"></i><span id="cardLblUser1">Berk</span></span>
+              <span class="text-[10px]">TL</span>
+            </div>
+            <p class="text-xl lg:text-2xl font-semibold tracking-tight mt-2" id="statBenTotal">0.00 ₺</p>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1" id="statBenCount">0 harcama</p>
+          </div>
+
+          <div class="card p-4">
+            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+              <span class="text-xs font-medium flex items-center gap-1.5"><i data-lucide="user" class="w-3.5 h-3.5 text-teal-500"></i><span id="cardLblUser2">Asya</span></span>
+              <span class="text-[10px]">TL</span>
+            </div>
+            <p class="text-xl lg:text-2xl font-semibold tracking-tight mt-2" id="statKizTotal">0.00 ₺</p>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1" id="statKizCount">0 harcama</p>
+          </div>
+
+          <div class="card p-4">
+            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+              <span class="text-xs font-medium flex items-center gap-1.5"><i data-lucide="users" class="w-3.5 h-3.5 text-slate-500"></i>Ortak harcamalar</span>
+              <span class="text-[10px]">TL</span>
+            </div>
+            <p class="text-xl lg:text-2xl font-semibold tracking-tight mt-2" id="statOrtakTotal">0.00 ₺</p>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1" id="statOrtakCount">0 harcama</p>
+          </div>
+
+          <div class="card p-4">
+            <div class="flex items-center justify-between text-slate-500 dark:text-slate-400">
+              <span class="text-xs font-medium flex items-center gap-1.5"><i data-lucide="calendar-days" class="w-3.5 h-3.5 text-emerald-500"></i>Günlük ortalama</span>
+              <span class="text-[10px]">TL/gün</span>
+            </div>
+            <p class="text-xl lg:text-2xl font-semibold tracking-tight mt-2" id="statDailyAvg">0.00 ₺</p>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1" id="statDaysRange">Seçili dönemde</p>
+          </div>
+        </section>
+
+        <!-- KATEGORİ KARŞILAŞTIRMA MATRİSİ (VS) -->
+        <section class="card p-5 space-y-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                <i data-lucide="swords" class="w-4 h-4"></i>
+              </div>
+              <div>
+                <h3 class="text-sm font-semibold">Kategori Kapıştırması (Berk vs Asya)</h3>
+                <p class="text-xs text-slate-500 dark:text-slate-400">Seçili dönemdeki kategori bazlı harcama kıyaslaması</p>
+              </div>
+            </div>
+          </div>
+          <div class="overflow-x-auto custom-scrollbar">
+            <table class="w-full text-sm">
+              <thead>
+                <tr class="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400 border-b border-slate-200 dark:border-slate-800">
+                  <th class="py-3 px-3">Kategori</th>
+                  <th class="py-3 px-3 text-right" id="thUser1">Berk</th>
+                  <th class="py-3 px-3 text-right" id="thUser2">Asya</th>
+                  <th class="py-3 px-3 text-right">Durum / Fark</th>
+                </tr>
+              </thead>
+              <tbody id="vsMatrixBody" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <div class="grid grid-cols-1 lg:grid-cols-5 gap-6">
+          <!-- Budget -->
+          <section class="card p-5 space-y-4 lg:col-span-2 self-start">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <i data-lucide="target" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <h3 class="text-sm font-semibold">Aylık bütçe</h3>
+                  <p class="text-xs text-slate-500 dark:text-slate-400">Bu ayki harcama limiti</p>
+                </div>
+              </div>
+              <button onclick="openBudgetModal()" class="btn-secondary !py-1.5 !px-2.5 text-xs"><i data-lucide="pencil" class="w-3.5 h-3.5"></i>Düzenle</button>
+            </div>
+
+            <p class="text-2xl font-semibold tracking-tight" id="budgetAmountDisplay">15,000 ₺</p>
+
+            <div class="space-y-2">
+              <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 overflow-hidden">
+                <div id="budgetProgressBar" class="h-full rounded-full transition-all duration-500 bg-emerald-500" style="width: 0%"></div>
+              </div>
+              <div class="flex justify-between text-xs font-medium">
+                <span id="budgetStatusText" class="text-emerald-600 dark:text-emerald-400">%0 kullanıldı</span>
+                <span id="budgetRemainingText" class="text-slate-500 dark:text-slate-400">Kalan: 15,000 ₺</span>
+              </div>
+            </div>
+          </section>
+
+          <!-- Recurring -->
+          <section class="card p-5 space-y-4 lg:col-span-3">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                  <i data-lucide="repeat" class="w-4 h-4"></i>
+                </div>
+                <div>
+                  <h3 class="text-sm font-semibold">Sabit harcamalar</h3>
+                  <p class="text-xs text-slate-500 dark:text-slate-400">Tek tıkla bugüne ekleyin</p>
+                </div>
+              </div>
+              <button onclick="toggleRecurringAccordion()" id="btnToggleRecurring" class="text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:underline">Göster (4 şablon)</button>
+            </div>
+
+            <div id="recurringContainer" class="hidden pt-4 border-t border-slate-200 dark:border-slate-800">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" id="recurringList"></div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ============ VIEW: ADD ============ -->
+      <div id="view-add" class="hidden">
+        <section class="card max-w-2xl mx-auto">
+          <div class="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+            <div>
+              <h2 class="text-sm font-semibold">Yeni harcama</h2>
+              <p class="text-xs text-slate-500 dark:text-slate-400">Tutar, tarih ve kategori girin</p>
+            </div>
+            <span id="activeUserBadge" class="text-xs px-2.5 py-1 rounded-md bg-indigo-50 dark:bg-indigo-500/10 text-indigo-700 dark:text-indigo-300 font-medium">Kaydeden: Berk</span>
+          </div>
+
+          <form id="expenseForm" onsubmit="handleFormSubmit(event)" class="p-5 space-y-5">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label class="field-label">Tutar (TL)</label>
+                <div class="relative">
+                  <input type="number" id="inputAmount" step="0.01" min="0.01" required placeholder="0.00" class="field !text-base !font-semibold pr-8">
+                  <span class="absolute right-3 top-2.5 text-slate-400 text-sm">₺</span>
+                </div>
+              </div>
+              <div>
+                <label class="field-label">Tarih</label>
+                <input type="date" id="inputDate" required class="field">
+              </div>
+              <div>
+                <label class="field-label">Harcama türü</label>
+                <div class="grid grid-cols-2 gap-0.5 p-0.5 bg-slate-100 dark:bg-slate-800 rounded-lg">
+                  <button type="button" id="btnTypeKisel" onclick="setExpenseType('Kişisel')" class="py-1.5 text-xs font-semibold rounded-md transition flex items-center justify-center gap-1.5">
+                    <i data-lucide="lock" class="w-3.5 h-3.5"></i>Kişisel
+                  </button>
+                  <button type="button" id="btnTypeOrtak" onclick="setExpenseType('Ortak')" class="py-1.5 text-xs font-semibold rounded-md transition flex items-center justify-center gap-1.5">
+                    <i data-lucide="users" class="w-3.5 h-3.5"></i>Ortak
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label class="field-label">Kategori</label>
+              <div class="flex flex-wrap gap-2" id="quickCategoryPills"></div>
+              <input type="hidden" id="selectedCategory" value="Yemek">
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label class="field-label">Özel etiket <span class="text-slate-400 font-normal">(isteğe bağlı)</span></label>
+                <input type="text" id="inputCustomCategory" placeholder="Örn: Konser, Hediye" class="field">
+              </div>
+              <div>
+                <label class="field-label">Açıklama <span class="text-slate-400 font-normal">(isteğe bağlı)</span></label>
+                <input type="text" id="inputNote" placeholder="Örn: Kadıköy kahve molası" class="field">
+              </div>
+            </div>
+
+            <button type="submit" class="btn-primary w-full !py-2.5">
+              <i data-lucide="check" class="w-4 h-4"></i> Gideri kaydet
+            </button>
+          </form>
+        </section>
+      </div>
+
+      <!-- ============ VIEW: CHARTS ============ -->
+      <div id="view-charts" class="hidden">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <section class="card p-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-semibold flex items-center gap-2">
+                <i data-lucide="pie-chart" class="w-4 h-4 text-slate-400"></i><span id="chartCategoryTitle">Kategori dağılımı</span>
+              </h3>
+              <span id="tabTotalSum" class="text-sm font-semibold">0.00 ₺</span>
+            </div>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+              <div class="relative w-full h-48 flex items-center justify-center">
+                <canvas id="categoryChart"></canvas>
+                <div id="noDataCategoryMsg" class="hidden absolute text-slate-400 text-xs text-center font-medium">Harcama yok</div>
+              </div>
+              <div id="categoryBreakdownList" class="space-y-3 max-h-48 overflow-y-auto custom-scrollbar pr-1 text-xs"></div>
+            </div>
+          </section>
+
+          <section class="card p-5 space-y-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-semibold flex items-center gap-2">
+                <i data-lucide="trending-up" class="w-4 h-4 text-slate-400"></i>Günlük harcama trendi
+              </h3>
+              <span class="text-[11px] text-slate-500 dark:text-slate-400">Tarihe göre</span>
+            </div>
+            <div class="relative w-full h-48 flex items-center justify-center">
+              <canvas id="dayOfWeekChart"></canvas>
+              <div id="noDataDayMsg" class="hidden absolute text-slate-400 text-xs text-center font-medium">Veri bulunmuyor</div>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ============ VIEW: HISTORY ============ -->
+      <div id="view-history" class="hidden">
+        <section class="card overflow-hidden">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-5 py-4 border-b border-slate-200 dark:border-slate-800">
+            <div class="flex items-center gap-2">
+              <h3 class="text-sm font-semibold">Harcama geçmişi</h3>
+              <span id="itemCountBadge" class="text-[11px] px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 font-medium">0 kayıt</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <div class="relative flex-1 sm:w-64">
+                <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none"></i>
+                <input type="text" id="searchInput" oninput="handleSearchInput(event)" placeholder="Ara: kategori, açıklama, kişi" class="field !pl-9">
+              </div>
+              <button onclick="exportToCSV()" class="btn-secondary whitespace-nowrap"><i data-lucide="download" class="w-4 h-4"></i><span class="hidden sm:inline">CSV indir</span></button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto custom-scrollbar max-h-[34rem] overflow-y-auto">
+            <table class="w-full text-sm">
+              <thead class="sticky top-0 z-10 bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800">
+                <tr class="text-left text-[11px] font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                  <th class="px-5 py-3 whitespace-nowrap">Tarih</th>
+                  <th class="px-3 py-3">Kategori</th>
+                  <th class="px-3 py-3 hidden md:table-cell">Açıklama</th>
+                  <th class="px-3 py-3 hidden sm:table-cell">Kaydeden</th>
+                  <th class="px-3 py-3 hidden sm:table-cell">Tür</th>
+                  <th class="px-3 py-3 text-right">Tutar</th>
+                  <th class="px-3 py-3 w-12"></th>
+                </tr>
+              </thead>
+              <tbody id="expenseList" class="divide-y divide-slate-100 dark:divide-slate-800"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- BOTTOM NAV (mobile) -->
+  <nav class="lg:hidden fixed bottom-0 inset-x-0 z-30 bg-white/90 dark:bg-slate-900/90 backdrop-blur border-t border-slate-200 dark:border-slate-800 safe-bottom">
+    <div class="grid grid-cols-4">
+      <button data-view="overview" data-nav="bottom" onclick="switchView('overview')" class="flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition">
+        <i data-lucide="layout-dashboard" class="w-5 h-5"></i>Özet
+      </button>
+      <button data-view="add" data-nav="bottom" onclick="switchView('add')" class="flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition">
+        <i data-lucide="plus-circle" class="w-5 h-5"></i>Ekle
+      </button>
+      <button data-view="charts" data-nav="bottom" onclick="switchView('charts')" class="flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition">
+        <i data-lucide="bar-chart-3" class="w-5 h-5"></i>Grafikler
+      </button>
+      <button data-view="history" data-nav="bottom" onclick="switchView('history')" class="flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition">
+        <i data-lucide="history" class="w-5 h-5"></i>Geçmiş
+      </button>
+    </div>
+  </nav>
+
+  <!-- BUDGET MODAL -->
+  <div id="budgetModal" class="modal-backdrop hidden">
+    <div class="modal-panel">
+      <div class="flex items-center justify-between">
+        <h4 class="text-sm font-semibold flex items-center gap-2"><i data-lucide="target" class="w-4 h-4 text-indigo-500"></i>Aylık bütçe hedefi</h4>
+        <button onclick="closeBudgetModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <div>
+        <label class="field-label">Yeni bütçe limiti (TL)</label>
+        <input type="number" id="inputBudgetGoal" step="500" placeholder="15000" class="field !text-base !font-semibold">
+      </div>
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button onclick="closeBudgetModal()" class="btn-secondary">İptal</button>
+        <button onclick="saveBudgetGoal()" class="btn-primary">Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DELETE MODAL -->
+  <div id="deleteModal" class="modal-backdrop hidden">
+    <div class="modal-panel text-center">
+      <div class="w-11 h-11 rounded-full bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 flex items-center justify-center mx-auto">
+        <i data-lucide="trash-2" class="w-5 h-5"></i>
+      </div>
+      <div>
+        <h4 class="text-base font-semibold">Gideri sil</h4>
+        <p class="text-sm text-slate-500 dark:text-slate-400 mt-1">Bu harcama kaydını silmek istediğinize emin misiniz?</p>
+      </div>
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button onclick="closeDeleteModal()" class="btn-secondary">İptal</button>
+        <button id="confirmDeleteBtn" class="btn bg-rose-600 text-white hover:bg-rose-700 shadow-sm">Evet, sil</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAG MODAL -->
+  <div id="tagModal" class="modal-backdrop hidden">
+    <div class="modal-panel">
+      <div class="flex items-center justify-between">
+        <h4 class="text-sm font-semibold flex items-center gap-2"><i data-lucide="tag" class="w-4 h-4 text-indigo-500"></i>Yeni etiket ekle</h4>
+        <button onclick="closeTagModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <div>
+        <label class="field-label">Etiket adı</label>
+        <input type="text" id="inputTagName" placeholder="Örn: Lunapark" class="field">
+      </div>
+      <div>
+        <label class="field-label">İkon</label>
+        <div id="tagIconGrid" class="grid grid-cols-8 gap-1.5"></div>
+        <input type="hidden" id="inputTagIcon" value="tag">
+      </div>
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button onclick="closeTagModal()" class="btn-secondary">İptal</button>
+        <button onclick="saveNewTag()" class="btn-primary">Ekle</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TEMPLATE MODAL -->
+  <div id="templateModal" class="modal-backdrop hidden">
+    <div class="modal-panel max-h-[90vh] overflow-y-auto custom-scrollbar">
+      <div class="flex items-center justify-between">
+        <h4 class="text-sm font-semibold flex items-center gap-2"><i data-lucide="repeat" class="w-4 h-4 text-indigo-500"></i>Yeni şablon ekle</h4>
+        <button onclick="closeTemplateModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <div>
+        <label class="field-label">Şablon adı</label>
+        <input type="text" id="inputTplName" placeholder="Örn: Spor salonu" class="field">
+      </div>
+      <div>
+        <label class="field-label">Sabit tutar (TL)</label>
+        <input type="number" id="inputTplAmount" step="0.01" placeholder="0.00" class="field">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="field-label">Kategori</label>
+          <select id="inputTplCategory" class="field"></select>
+        </div>
+        <div>
+          <label class="field-label">Tür</label>
+          <select id="inputTplType" class="field">
+            <option value="Ortak">Ortak</option>
+            <option value="Kişisel">Kişisel</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2 pt-1">
+        <button onclick="closeTemplateModal()" class="btn-secondary">İptal</button>
+        <button onclick="saveNewTemplate()" class="btn-primary">Kaydet</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ADMIN MODAL -->
+  <div id="adminModal" class="modal-backdrop hidden">
+    <div class="modal-panel">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-slate-800">
+        <h4 class="text-sm font-semibold flex items-center gap-2"><i data-lucide="settings" class="w-4 h-4 text-indigo-500"></i>Yönetim paneli</h4>
+        <button onclick="closeAdminModal()" class="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><i data-lucide="x" class="w-4 h-4"></i></button>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="field-label">Kullanıcı 1 adı</label>
+          <input type="text" id="adminUser1Input" class="field">
+        </div>
+        <div>
+          <label class="field-label">Kullanıcı 2 adı</label>
+          <input type="text" id="adminUser2Input" class="field">
+        </div>
+      </div>
+      <div>
+        <label class="field-label">Aylık ortak bütçe (TL)</label>
+        <input type="number" id="adminBudgetInput" step="500" class="field">
+      </div>
+      <div class="pt-3 border-t border-slate-200 dark:border-slate-800 space-y-2">
+        <button onclick="saveAdminSettings()" class="btn-primary w-full">Ayarları kaydet</button>
+        <button onclick="factoryReset()" class="btn w-full bg-rose-50 dark:bg-rose-500/10 text-rose-600 dark:text-rose-400 hover:bg-rose-600 hover:text-white">
+          <i data-lucide="alert-triangle" class="w-4 h-4"></i>Tüm verileri sıfırla
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div id="toast" class="fixed bottom-24 lg:bottom-6 right-4 lg:right-6 z-[60] transform translate-y-24 opacity-0 transition-all duration-300 bg-slate-900 dark:bg-white text-white dark:text-slate-900 px-4 py-2.5 rounded-lg shadow-md text-xs font-medium flex items-center gap-2">
+    <span id="toastIcon"></span>
+    <span id="toastMessage">İşlem başarılı</span>
+  </div>
+
+  <!-- APPLICATION JS -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, collection, addDoc, deleteDoc, doc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Kendi Firebase Bilgilerin:
+    const __firebase_config = JSON.stringify({
+      apiKey: "AIzaSyD4K-eNwMi_Tz2RaApY3jxBQh7IiQDyIiU",
+      authDomain: "gidertakip-8bcb1.firebaseapp.com",
+      projectId: "gidertakip-8bcb1",
+      storageBucket: "gidertakip-8bcb1.firebasestorage.app",
+      messagingSenderId: "128203978007",
+      appId: "1:128203978007:web:45c15da8f7b29315b4b352"
+    });
+
+    const refreshIcons = () => { if (window.lucide) window.lucide.createIcons(); };
+    const ico = (name, cls = 'w-4 h-4') => `<i data-lucide="${name}" class="${cls}"></i>`;
+    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const localDateStr = (d = new Date()) => {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    };
+    const fmt = (n) => Number(n).toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const SEG_ON = 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-sm';
+    const SEG_OFF = 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200';
+    const PILL_ON = 'bg-indigo-600 text-white border-indigo-600 shadow-sm';
+    const PILL_OFF = 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800';
+    const SIDE_ON = 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300';
+    const SIDE_OFF = 'text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800';
+    const BOT_ON = 'text-indigo-600 dark:text-indigo-400';
+    const BOT_OFF = 'text-slate-500 dark:text-slate-400';
+
+    const VIEW_TITLES = { overview: 'Özet', add: 'Harcama ekle', charts: 'Grafikler', history: 'Geçmiş' };
+
+    window.state = {
+      user1: localStorage.getItem('app_user1') || 'Berk',
+      user2: localStorage.getItem('app_user2') || 'Asya',
+      activeUser: localStorage.getItem('app_activeUser') || localStorage.getItem('app_user1') || 'Berk',
+      expenseType: 'Ortak',
+      activeTab: 1,
+      activeView: 'overview',
+      timeFilter: 'ALL',
+      timeOffset: 0,
+      searchQuery: '',
+      selectedCategory: 'Yemek',
+      monthlyBudget: parseFloat(localStorage.getItem('monthly_budget') || '15000'),
+      expenses: [],
+      categories: [],
+      recurringTemplates: [],
+      pendingDeleteId: null,
+      theme: localStorage.getItem('app_theme') || 'dark',
+      recurringAccordionOpen: false
+    };
+
+    const DEFAULT_CATEGORIES = [
+      { name: 'Yemek', icon: 'utensils', color: '#f59e0b' },
+      { name: 'Kahve', icon: 'coffee', color: '#8b5cf6' },
+      { name: 'Sinema', icon: 'clapperboard', color: '#3b82f6' },
+      { name: 'Kıyafet', icon: 'shirt', color: '#ec4899' },
+      { name: 'Market', icon: 'shopping-cart', color: '#10b981' },
+      { name: 'Ulaşım', icon: 'bus', color: '#06b6d4' },
+      { name: 'Ev/Kira', icon: 'house', color: '#f97316' },
+      { name: 'Eğlence', icon: 'popcorn', color: '#6366f1' },
+      { name: 'Sağlık', icon: 'stethoscope', color: '#ef4444' },
+      { name: 'Fatura', icon: 'receipt', color: '#84cc16' },
+      { name: 'Diğer', icon: 'lightbulb', color: '#64748b' }
+    ];
+    const ICON_BY_DEFAULT_NAME = Object.fromEntries(DEFAULT_CATEGORIES.map(c => [c.name, c.icon]));
+
+    const ICON_CHOICES = ['tag', 'utensils', 'coffee', 'shopping-bag', 'car', 'plane', 'gift', 'music',
+      'gamepad-2', 'dumbbell', 'book-open', 'heart', 'briefcase', 'fuel', 'smartphone', 'paw-print'];
+
+    const DEFAULT_RECURRING = [
+      { id: 'tpl_1', title: 'Netflix Aboneliği', amount: 230, category: 'Eğlence', type: 'Ortak', note: 'Aylık dijital abonelik' },
+      { id: 'tpl_2', title: 'Spotify Premium', amount: 65, category: 'Eğlence', type: 'Ortak', note: 'Müzik paketi' },
+      { id: 'tpl_3', title: 'Ev Kirası', amount: 15000, category: 'Ev/Kira', type: 'Ortak', note: 'Aylık ortak kira' },
+      { id: 'tpl_4', title: 'İnternet Faturası', amount: 350, category: 'Fatura', type: 'Ortak', note: 'Fiber ev interneti' }
+    ];
+
+    const COLOR_PALETTE = ['#f59e0b', '#8b5cf6', '#3b82f6', '#ec4899', '#10b981', '#06b6d4', '#f97316', '#6366f1', '#ef4444', '#84cc16', '#64748b', '#a855f7', '#14b8a6', '#f43f5e'];
+
+    let db = null;
+    let auth = null;
+    let categoryChartInstance = null;
+    let dayOfWeekChartInstance = null;
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'gider-takip-app';
+
+    window.toggleTheme = function () {
+      window.state.theme = window.state.theme === 'dark' ? 'light' : 'dark';
+      localStorage.setItem('app_theme', window.state.theme);
+      applyTheme();
+    };
+
+    function applyTheme() {
+      const isDark = window.state.theme === 'dark';
+      document.documentElement.classList.toggle('dark', isDark);
+      document.getElementById('themeIcon').innerHTML = ico(isDark ? 'sun' : 'moon');
+      renderApp();
+    }
+
+    window.copyShareLink = function () {
+      const dummy = document.createElement('input');
+      document.body.appendChild(dummy);
+      dummy.value = window.location.href;
+      dummy.select();
+      document.execCommand('copy');
+      document.body.removeChild(dummy);
+      showToast('Bağlantı kopyalandı', 'link');
+    };
+
+    async function initFirebase() {
+      const syncStatus = document.getElementById('syncStatus');
+      try {
+        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+          const firebaseConfig = JSON.parse(__firebase_config);
+          const app = initializeApp(firebaseConfig);
+          auth = getAuth(app);
+          db = getFirestore(app);
+
+          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+            await signInWithCustomToken(auth, __initial_auth_token);
+          } else {
+            await signInAnonymously(auth);
+          }
+
+          syncStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Bulutta senkronize';
+          subscribeToExpenses();
+        } else {
+          syncStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500"></span> Yerel depolama';
+          loadDemoData();
+        }
+      } catch (err) {
+        console.warn('Firebase init fallback:', err);
+        syncStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500"></span> Yerel depolama';
+        loadDemoData();
+      }
+    }
+
+    function subscribeToExpenses() {
+      if (!db) return;
+      const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'expenses');
+
+      onSnapshot(colRef, (snapshot) => {
+        const fetched = [];
+        snapshot.forEach(docSnap => {
+          fetched.push({ id: docSnap.id, ...docSnap.data() });
+        });
+        fetched.sort((a, b) => new Date(b.date) - new Date(a.date));
+        window.state.expenses = fetched;
+        saveLocalStorage();
+        renderApp();
+      }, (err) => {
+        console.error('Firestore snapshot error:', err);
+        loadDemoData();
+      });
+    }
+
+    function loadDemoData() {
+      const saved = localStorage.getItem('expenses_local');
+      if (saved) {
+        try {
+          let parsed = JSON.parse(saved);
+          window.state.expenses = parsed;
+        } catch (e) { window.state.expenses = []; }
+      } else {
+        const todayStr = localDateStr();
+        const yesterdayStr = localDateStr(new Date(Date.now() - 86400000));
+        window.state.expenses = [
+          { id: '1', amount: 180, paidBy: window.state.user1, type: 'Ortak', category: 'Kahve', note: 'Karaköy Kahve', date: todayStr },
+          { id: '2', amount: 650, paidBy: window.state.user2, type: 'Ortak', category: 'Yemek', note: 'Akşam yemeği', date: yesterdayStr }
+        ];
+        saveLocalStorage();
+      }
+      renderApp();
+    }
+
+    function saveLocalStorage() {
+      localStorage.setItem('expenses_local', JSON.stringify(window.state.expenses));
+    }
+
+    window.handleFormSubmit = async function (e) {
+      e.preventDefault();
+      const amountInput = document.getElementById('inputAmount');
+      const dateInput = document.getElementById('inputDate');
+      const customCategoryInput = document.getElementById('inputCustomCategory');
+      const noteInput = document.getElementById('inputNote');
+
+      const amount = parseFloat(amountInput.value);
+      if (!amount || amount <= 0) return;
+
+      const expenseDate = dateInput.value || localDateStr();
+      const category = customCategoryInput.value.trim() || window.state.selectedCategory;
+
+      const newExpense = {
+        amount: amount,
+        paidBy: window.state.activeUser,
+        type: window.state.expenseType,
+        category: category,
+        note: noteInput.value.trim(),
+        date: expenseDate
+      };
+
+      amountInput.value = '';
+      customCategoryInput.value = '';
+      noteInput.value = '';
+
+      newExpense.id = 'temp_' + Date.now();
+      window.state.expenses.unshift(newExpense);
+      saveLocalStorage();
+      renderApp();
+      showToast('Gider başarıyla eklendi', 'check-circle-2');
+
+      try {
+        if (db && auth && auth.currentUser) {
+          const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'expenses');
+          await addDoc(colRef, {
+            amount: newExpense.amount,
+            paidBy: newExpense.paidBy,
+            type: newExpense.type,
+            category: newExpense.category,
+            note: newExpense.note,
+            date: newExpense.date
+          });
+        }
+      } catch (err) {
+        console.error('Add error:', err);
+      }
+    };
+
+    window.addRecurringExpense = async function (id) {
+      const item = window.state.recurringTemplates.find(t => t.id === id);
+      if (!item) return;
+
+      const newExpense = {
+        amount: item.amount,
+        paidBy: window.state.activeUser,
+        type: item.type,
+        category: item.category,
+        note: item.title,
+        date: localDateStr()
+      };
+
+      newExpense.id = 'temp_' + Date.now();
+      window.state.expenses.unshift(newExpense);
+      saveLocalStorage();
+      renderApp();
+      showToast(`${item.title} eklendi`, 'repeat');
+
+      try {
+        if (db && auth && auth.currentUser) {
+          const colRef = collection(db, 'artifacts', appId, 'public', 'data', 'expenses');
+          await addDoc(colRef, {
+            amount: newExpense.amount,
+            paidBy: newExpense.paidBy,
+            type: newExpense.type,
+            category: newExpense.category,
+            note: newExpense.note,
+            date: newExpense.date
+          });
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    };
+
+    window.confirmDelete = function (id) {
+      window.state.pendingDeleteId = id;
+      document.getElementById('deleteModal').classList.remove('hidden');
+    };
+
+    window.closeDeleteModal = function () {
+      window.state.pendingDeleteId = null;
+      document.getElementById('deleteModal').classList.add('hidden');
+    };
+
+    document.getElementById('confirmDeleteBtn').addEventListener('click', async () => {
+      const id = window.state.pendingDeleteId;
+      if (!id) return;
+
+      window.state.expenses = window.state.expenses.filter(item => item.id !== id);
+      saveLocalStorage();
+      renderApp();
+      closeDeleteModal();
+      showToast('Gider silindi', 'trash-2');
+
+      try {
+        if (db && auth && auth.currentUser && !id.startsWith('temp_')) {
+          await deleteDoc(doc(db, 'artifacts', appId, 'public', 'data', 'expenses', id));
+        }
+      } catch (err) {
+        console.error('Delete error:', err);
+      }
+    });
+
+    window.openBudgetModal = function () {
+      document.getElementById('inputBudgetGoal').value = window.state.monthlyBudget;
+      document.getElementById('budgetModal').classList.remove('hidden');
+    };
+    window.closeBudgetModal = function () {
+      document.getElementById('budgetModal').classList.add('hidden');
+    };
+    window.saveBudgetGoal = function () {
+      const val = parseFloat(document.getElementById('inputBudgetGoal').value);
+      if (val && val > 0) {
+        window.state.monthlyBudget = val;
+        localStorage.setItem('monthly_budget', val.toString());
+        closeBudgetModal();
+        renderApp();
+        showToast('Aylık bütçe güncellendi', 'target');
+      }
+    };
+
+    window.openAdminModal = function () {
+      document.getElementById('adminUser1Input').value = window.state.user1;
+      document.getElementById('adminUser2Input').value = window.state.user2;
+      document.getElementById('adminBudgetInput').value = window.state.monthlyBudget;
+      document.getElementById('adminModal').classList.remove('hidden');
+    };
+    window.closeAdminModal = function () {
+      document.getElementById('adminModal').classList.add('hidden');
+    };
+
+    window.saveAdminSettings = function () {
+      const u1 = document.getElementById('adminUser1Input').value.trim() || 'Berk';
+      const u2 = document.getElementById('adminUser2Input').value.trim() || 'Asya';
+      const budget = parseFloat(document.getElementById('adminBudgetInput').value) || 15000;
+
+      const oldU1 = window.state.user1;
+      const oldU2 = window.state.user2;
+
+      window.state.expenses = window.state.expenses.map(e => {
+        if (e.paidBy === oldU1) e.paidBy = u1;
+        else if (e.paidBy === oldU2) e.paidBy = u2;
+        return e;
+      });
+
+      const wasUser1 = window.state.activeUser === oldU1 || window.state.activeUser === 'Ben' || window.state.activeUser === 'Berk';
+
+      window.state.user1 = u1;
+      window.state.user2 = u2;
+      window.state.monthlyBudget = budget;
+      window.state.activeUser = wasUser1 ? u1 : u2;
+
+      localStorage.setItem('app_user1', u1);
+      localStorage.setItem('app_user2', u2);
+      localStorage.setItem('app_activeUser', window.state.activeUser);
+      localStorage.setItem('monthly_budget', budget.toString());
+      saveLocalStorage();
+
+      closeAdminModal();
+      setActiveUser(window.state.activeUser);
+      renderApp();
+      showToast('Ayarlar kaydedildi', 'settings');
+    };
+
+    window.factoryReset = function () {
+      if (confirm('Tüm harcama verileriniz, etiketleriniz ve şablonlarınız kalıcı olarak silinecektir. Emin misiniz?')) {
+        localStorage.clear();
+        window.location.reload();
+      }
+    };
+
+    window.setActiveUser = function (user) {
+      window.state.activeUser = user;
+      localStorage.setItem('app_activeUser', user);
+      document.getElementById('activeUserBadge').innerText = `Kaydeden: ${user}`;
+
+      const btn1 = document.getElementById('btnUser1');
+      const btn2 = document.getElementById('btnUser2');
+      const base = 'px-3 py-1.5 rounded-md text-xs font-semibold transition flex items-center gap-1.5 ';
+      const isUser1 = user === window.state.user1;
+      btn1.className = base + (isUser1 ? SEG_ON : SEG_OFF);
+      btn2.className = base + (!isUser1 ? SEG_ON : SEG_OFF);
+    };
+
+    window.setExpenseType = function (type) {
+      window.state.expenseType = type;
+      const btnKisel = document.getElementById('btnTypeKisel');
+      const btnOrtak = document.getElementById('btnTypeOrtak');
+      const base = 'py-1.5 text-xs font-semibold rounded-md transition flex items-center justify-center gap-1.5 ';
+      btnKisel.className = base + (type === 'Kişisel' ? SEG_ON : SEG_OFF);
+      btnOrtak.className = base + (type === 'Ortak' ? SEG_ON : SEG_OFF);
+    };
+
+    window.selectCategory = function (catName) {
+      window.state.selectedCategory = catName;
+      document.getElementById('selectedCategory').value = catName;
+      renderCategoryPills();
+      refreshIcons();
+    };
+
+    window.switchTab = function (tabNum) {
+      window.state.activeTab = tabNum;
+      renderTabButtons();
+      renderApp();
+    };
+
+    function renderTabButtons() {
+      const base = 'px-3 py-2 rounded-md text-xs font-semibold transition text-center ';
+      [1, 2, 3].forEach(n => {
+        document.getElementById(`tabBtn${n}`).className = base + (n === window.state.activeTab ? SEG_ON : SEG_OFF);
+      });
+    }
+
+    window.setTimeFilter = function (filterKey) {
+      window.state.timeFilter = filterKey;
+      window.state.timeOffset = 0;
+      renderTimePills();
+      renderApp();
+    };
+
+    window.shiftTimePeriod = function (direction) {
+      window.state.timeOffset += direction;
+      renderApp();
+    };
+
+    function renderTimePills() {
+      ['ALL', 'WEEK', 'MONTH'].forEach(key => {
+        const btn = document.getElementById(`tf_${key}`);
+        btn.className = 'px-3 py-1.5 rounded-lg border whitespace-nowrap transition ' + (key === window.state.timeFilter ? PILL_ON : PILL_OFF);
+      });
+      const navContainer = document.getElementById('timeNavContainer');
+      if (window.state.timeFilter === 'ALL') {
+        navContainer.classList.add('hidden');
+        navContainer.classList.remove('flex');
+      } else {
+        navContainer.classList.remove('hidden');
+        navContainer.classList.add('flex');
+      }
+    }
+
+    window.handleSearchInput = function (e) {
+      window.state.searchQuery = e.target.value.toLowerCase().trim();
+      renderApp();
+    };
+
+    window.switchView = function (view) {
+      window.state.activeView = view;
+      ['overview', 'add', 'charts', 'history'].forEach(v => {
+        document.getElementById(`view-${v}`).classList.toggle('hidden', v !== view);
+      });
+      document.getElementById('filterBar').classList.toggle('hidden', view === 'add');
+      document.getElementById('pageTitle').innerText = VIEW_TITLES[view];
+
+      document.querySelectorAll('[data-view]').forEach(btn => {
+        const active = btn.dataset.view === view;
+        const isSide = btn.dataset.nav === 'side';
+        const base = isSide
+          ? 'w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm font-medium transition '
+          : 'flex flex-col items-center gap-1 py-2.5 text-[10px] font-medium transition ';
+        btn.className = base + (isSide ? (active ? SIDE_ON : SIDE_OFF) : (active ? BOT_ON : BOT_OFF));
+      });
+
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      renderApp();
+    };
+
+    window.toggleRecurringAccordion = function () {
+      window.state.recurringAccordionOpen = !window.state.recurringAccordionOpen;
+      const container = document.getElementById('recurringContainer');
+      const btn = document.getElementById('btnToggleRecurring');
+      if (window.state.recurringAccordionOpen) {
+        container.classList.remove('hidden');
+        btn.innerText = 'Gizle';
+      } else {
+        container.classList.add('hidden');
+        btn.innerText = `Göster (${window.state.recurringTemplates.length} şablon)`;
+      }
+    };
+
+    window.openTagModal = function () {
+      document.getElementById('inputTagName').value = '';
+      document.getElementById('inputTagIcon').value = 'tag';
+      renderTagIconGrid();
+      document.getElementById('tagModal').classList.remove('hidden');
+      refreshIcons();
+    };
+    window.closeTagModal = function () {
+      document.getElementById('tagModal').classList.add('hidden');
+    };
+
+    window.selectTagIcon = function (name) {
+      document.getElementById('inputTagIcon').value = name;
+      renderTagIconGrid();
+      refreshIcons();
+    };
+
+    function renderTagIconGrid() {
+      const selected = document.getElementById('inputTagIcon').value;
+      document.getElementById('tagIconGrid').innerHTML = ICON_CHOICES.map(name => `
+        <button type="button" data-icon="${name}" onclick="selectTagIcon(this.dataset.icon)"
+          class="aspect-square rounded-lg border flex items-center justify-center transition ${
+            selected === name
+              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-500/10 text-indigo-600 dark:text-indigo-300 ring-2 ring-indigo-500/20'
+              : 'border-slate-200 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+          }">${ico(name)}</button>
+      `).join('');
+    }
+
+    window.saveNewTag = function () {
+      const name = document.getElementById('inputTagName').value.trim();
+      const icon = document.getElementById('inputTagIcon').value || 'tag';
+      if (!name) return;
+
+      const color = COLOR_PALETTE[window.state.categories.length % COLOR_PALETTE.length];
+      window.state.categories.push({ name, icon, color });
+      localStorage.setItem('custom_categories', JSON.stringify(window.state.categories));
+
+      closeTagModal();
+      selectCategory(name);
+      renderCategoryPills();
+      refreshIcons();
+      showToast('Yeni etiket eklendi', 'tag');
+    };
+
+    window.openTemplateModal = function () {
+      const catSelect = document.getElementById('inputTplCategory');
+      catSelect.innerHTML = window.state.categories.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+      document.getElementById('inputTplName').value = '';
+      document.getElementById('inputTplAmount').value = '';
+      document.getElementById('templateModal').classList.remove('hidden');
+    };
+    window.closeTemplateModal = function () {
+      document.getElementById('templateModal').classList.add('hidden');
+    };
+
+    window.saveNewTemplate = function () {
+      const title = document.getElementById('inputTplName').value.trim();
+      const amount = parseFloat(document.getElementById('inputTplAmount').value);
+      const category = document.getElementById('inputTplCategory').value;
+      const type = document.getElementById('inputTplType').value;
+      if (!title || !amount) return;
+
+      const newTpl = { id: 'tpl_' + Date.now(), title, amount, category, type, note: 'Şablon harcaması' };
+      window.state.recurringTemplates.push(newTpl);
+      localStorage.setItem('custom_templates', JSON.stringify(window.state.recurringTemplates));
+
+      closeTemplateModal();
+      renderRecurringList();
+      refreshIcons();
+
+      if (!window.state.recurringAccordionOpen) {
+        toggleRecurringAccordion();
+      } else {
+        document.getElementById('btnToggleRecurring').innerText = 'Gizle';
+      }
+      showToast('Yeni şablon eklendi', 'repeat');
+    };
+
+    window.deleteTemplate = function (id) {
+      window.state.recurringTemplates = window.state.recurringTemplates.filter(t => t.id !== id);
+      localStorage.setItem('custom_templates', JSON.stringify(window.state.recurringTemplates));
+      renderRecurringList();
+      refreshIcons();
+      if (!window.state.recurringAccordionOpen) {
+        document.getElementById('btnToggleRecurring').innerText = `Göster (${window.state.recurringTemplates.length} şablon)`;
+      }
+    };
+
+    window.exportToCSV = function () {
+      const filtered = getFilteredExpenses();
+      if (filtered.length === 0) {
+        showToast('İndirilecek harcama kaydı yok', 'alert-triangle');
+        return;
+      }
+
+      const q = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+      let csvContent = 'data:text/csv;charset=utf-8,\uFEFF';
+      csvContent += 'Tarih,Kaydeden,Tur,Kategori,Tutar(TL),Aciklama\n';
+
+      filtered.forEach(row => {
+        csvContent += [q(row.date), q(row.paidBy), q(row.type), q(row.category), row.amount, q(row.note)].join(',') + '\n';
+      });
+
+      const link = document.createElement('a');
+      link.setAttribute('href', encodeURI(csvContent));
+      link.setAttribute('download', `gider_takip_export_${localDateStr()}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast('CSV dosyası indirildi', 'file-down');
+    };
+
+    function getDateRangeForFilter(filterKey, offset) {
+      const now = new Date();
+      if (filterKey === 'WEEK') {
+        const d = new Date(now);
+        d.setDate(d.getDate() + (offset * 7));
+        const day = d.getDay() || 7;
+        const monday = new Date(d);
+        monday.setDate(d.getDate() - day + 1);
+        monday.setHours(0, 0, 0, 0);
+        const sunday = new Date(monday);
+        sunday.setDate(monday.getDate() + 6);
+        sunday.setHours(23, 59, 59, 999);
+        return { start: monday, end: sunday, label: `${monday.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })} - ${sunday.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}` };
+      } else if (filterKey === 'MONTH') {
+        const targetYear = now.getFullYear();
+        const targetMonth = now.getMonth() + offset;
+        const firstDay = new Date(targetYear, targetMonth, 1);
+        firstDay.setHours(0, 0, 0, 0);
+        const lastDay = new Date(targetYear, targetMonth + 1, 0);
+        lastDay.setHours(23, 59, 59, 999);
+        return { start: firstDay, end: lastDay, label: firstDay.toLocaleDateString('tr-TR', { month: 'long', year: 'numeric' }) };
+      }
+      return { start: null, end: null, label: 'Tüm zamanlar' };
+    }
+
+    function isDateInFilter(dateStr, filterKey, offset) {
+      if (filterKey === 'ALL') return true;
+      const itemDate = new Date(dateStr);
+      const range = getDateRangeForFilter(filterKey, offset);
+      if (!range.start || !range.end) return true;
+      return itemDate >= range.start && itemDate <= range.end;
+    }
+
+    function getFilteredExpenses() {
+      const all = window.state.expenses;
+      let tabFiltered = [];
+
+      if (window.state.activeTab === 1) {
+        tabFiltered = all.filter(e => e.paidBy === window.state.user1);
+      } else if (window.state.activeTab === 2) {
+        tabFiltered = all.filter(e => e.paidBy === window.state.user2);
+      } else {
+        tabFiltered = all.filter(e => e.type === 'Ortak');
+      }
+
+      return tabFiltered.filter(e => {
+        const timeMatch = isDateInFilter(e.date, window.state.timeFilter, window.state.timeOffset);
+        const searchMatch = !window.state.searchQuery ||
+          e.category.toLowerCase().includes(window.state.searchQuery) ||
+          (e.note && e.note.toLowerCase().includes(window.state.searchQuery)) ||
+          e.paidBy.toLowerCase().includes(window.state.searchQuery);
+        return timeMatch && searchMatch;
+      });
+    }
+
+    function getCat(name) {
+      return window.state.categories.find(c => c.name === name) || { name, icon: 'tag', color: '#6366f1' };
+    }
+
+    function renderCategoryPills() {
+      const container = document.getElementById('quickCategoryPills');
+      let html = window.state.categories.map(cat => {
+        const isSelected = window.state.selectedCategory === cat.name;
+        return `
+          <button type="button" data-cat="${esc(cat.name)}" onclick="selectCategory(this.dataset.cat)"
+            class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition border ${
+              isSelected
+                ? 'bg-indigo-50 dark:bg-indigo-500/10 border-indigo-500 text-indigo-700 dark:text-indigo-300 ring-2 ring-indigo-500/15'
+                : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800'
+            }">
+            ${ico(cat.icon || 'tag', 'w-3.5 h-3.5')} ${esc(cat.name)}
+          </button>`;
+      }).join('');
+
+      html += `
+        <button type="button" onclick="openTagModal()" class="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition border border-dashed border-slate-300 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:text-indigo-600 hover:border-indigo-500">
+          ${ico('plus', 'w-3.5 h-3.5')} Yeni etiket
+        </button>`;
+      container.innerHTML = html;
+    }
+
+    function renderRecurringList() {
+      const listEl = document.getElementById('recurringList');
+      let html = window.state.recurringTemplates.map(item => {
+        const cat = getCat(item.category);
+        return `
+        <div class="group relative p-3 rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-950/40 flex items-center justify-between gap-3 hover:border-slate-300 dark:hover:border-slate-700 transition">
+          <div class="flex items-center gap-3 min-w-0">
+            <div class="w-8 h-8 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-center text-slate-500 shrink-0">${ico(cat.icon || 'tag', 'w-4 h-4')}</div>
+            <div class="min-w-0">
+              <p class="text-sm font-medium truncate">${esc(item.title)}</p>
+              <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate">${fmt(item.amount)} ₺ · ${esc(item.category)} · ${esc(item.type)}</p>
+            </div>
+          </div>
+          <button onclick="addRecurringExpense('${esc(item.id)}')" class="btn-primary !px-2.5 !py-1.5 text-xs shrink-0">${ico('plus', 'w-3.5 h-3.5')} Ekle</button>
+          <button onclick="deleteTemplate('${esc(item.id)}')" class="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-400 hover:text-rose-500 flex items-center justify-center lg:opacity-0 lg:group-hover:opacity-100 transition" title="Şablonu sil">${ico('x', 'w-3 h-3')}</button>
+        </div>`;
+      }).join('');
+
+      html += `
+        <button onclick="openTemplateModal()" class="w-full p-3 rounded-lg border border-dashed border-slate-300 dark:border-slate-700 text-slate-500 dark:text-slate-400 hover:border-indigo-500 hover:text-indigo-600 transition flex items-center justify-center gap-2 min-h-[62px] text-xs font-medium">
+          ${ico('plus', 'w-4 h-4')} Yeni şablon ekle
+        </button>`;
+      listEl.innerHTML = html;
+
+      const btn = document.getElementById('btnToggleRecurring');
+      if (!window.state.recurringAccordionOpen && btn) {
+        btn.innerText = `Göster (${window.state.recurringTemplates.length} şablon)`;
+      }
+    }
+
+    function renderVsMatrix(filteredExpenses) {
+      const u1 = window.state.user1;
+      const u2 = window.state.user2;
+      document.getElementById('thUser1').innerText = u1;
+      document.getElementById('thUser2').innerText = u2;
+
+      const catMap1 = {};
+      const catMap2 = {};
+      const allCats = new Set();
+
+      filteredExpenses.forEach(e => {
+        allCats.add(e.category);
+        if (e.paidBy === u1) {
+          catMap1[e.category] = (catMap1[e.category] || 0) + e.amount;
+        } else if (e.paidBy === u2) {
+          catMap2[e.category] = (catMap2[e.category] || 0) + e.amount;
+        }
+      });
+
+      const tbody = document.getElementById('vsMatrixBody');
+      const catsArray = Array.from(allCats);
+
+      if (catsArray.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="4" class="py-6 text-center text-xs text-slate-400">Bu dönemde harcama bulunmuyor</td></tr>`;
+        return;
+      }
+
+      tbody.innerHTML = catsArray.map(catName => {
+        const val1 = catMap1[catName] || 0;
+        const val2 = catMap2[catName] || 0;
+        const diff = val1 - val2;
+        const cat = getCat(catName);
+
+        let diffHtml = '';
+        if (diff > 0) {
+          diffHtml = `<span class="text-indigo-600 dark:text-indigo-400 font-semibold">${u1}, ${fmt(diff)} ₺ fazla</span>`;
+        } else if (diff < 0) {
+          diffHtml = `<span class="text-teal-600 dark:text-teal-400 font-semibold">${u2}, ${fmt(Math.abs(diff))} ₺ fazla</span>`;
+        } else {
+          diffHtml = `<span class="text-slate-400">Eşit</span>`;
+        }
+
+        return `
+          <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition">
+            <td class="py-3 px-3 font-medium flex items-center gap-2">
+              <span style="color:${cat.color}">${ico(cat.icon || 'tag', 'w-4 h-4')}</span>${esc(catName)}
+            </td>
+            <td class="py-3 px-3 text-right tabular-nums">${fmt(val1)} ₺</td>
+            <td class="py-3 px-3 text-right tabular-nums">${fmt(val2)} ₺</td>
+            <td class="py-3 px-3 text-right">${diffHtml}</td>
+          </tr>`;
+      }).join('');
+    }
+
+    function renderApp() {
+      renderCategoryPills();
+      renderRecurringList();
+      renderTabButtons();
+      renderTimePills();
+
+      document.getElementById('lblBtnUser1').innerText = window.state.user1;
+      document.getElementById('lblBtnUser2').innerText = window.state.user2;
+      document.getElementById('cardLblUser1').innerText = window.state.user1;
+      document.getElementById('cardLblUser2').innerText = window.state.user2;
+      document.getElementById('tabLbl1').innerText = window.state.user1;
+      document.getElementById('tabLbl2').innerText = window.state.user2;
+
+      const range = getDateRangeForFilter(window.state.timeFilter, window.state.timeOffset);
+      document.getElementById('timeRangeLabel').innerText = range.label;
+
+      const all = window.state.expenses;
+
+      const u1List = all.filter(e => e.paidBy === window.state.user1);
+      const u2List = all.filter(e => e.paidBy === window.state.user2);
+      const ortakList = all.filter(e => e.type === 'Ortak');
+
+      const benTotal = u1List.reduce((acc, c) => acc + c.amount, 0);
+      const benCount = u1List.length;
+      const kizTotal = u2List.reduce((acc, c) => acc + c.amount, 0);
+      const kizCount = u2List.length;
+      const ortakTotal = ortakList.reduce((acc, c) => acc + c.amount, 0);
+      const ortakCount = ortakList.length;
+
+      document.getElementById('statBenTotal').innerText = `${fmt(benTotal)} ₺`;
+      document.getElementById('statBenCount').innerText = `${benCount} harcama`;
+      document.getElementById('statKizTotal').innerText = `${fmt(kizTotal)} ₺`;
+      document.getElementById('statKizCount').innerText = `${kizCount} harcama`;
+      document.getElementById('statOrtakTotal').innerText = `${fmt(ortakTotal)} ₺`;
+      document.getElementById('statOrtakCount').innerText = `${ortakCount} harcama`;
+
+      document.getElementById('tab1Badge').innerText = `${fmt(benTotal)} ₺`;
+      document.getElementById('tab2Badge').innerText = `${fmt(kizTotal)} ₺`;
+      document.getElementById('tab3Badge').innerText = `${fmt(ortakTotal)} ₺`;
+
+      const filtered = getFilteredExpenses();
+      const currentFilteredTotal = filtered.reduce((acc, c) => acc + c.amount, 0);
+      document.getElementById('tabTotalSum').innerText = `${fmt(currentFilteredTotal)} ₺`;
+
+      if (filtered.length > 0) {
+        const uniqueDates = new Set(filtered.map(e => e.date)).size;
+        const dailyAvg = currentFilteredTotal / (uniqueDates || 1);
+        document.getElementById('statDailyAvg').innerText = `${fmt(dailyAvg)} ₺`;
+        document.getElementById('statDaysRange').innerText = `${uniqueDates} farklı günde`;
+      } else {
+        document.getElementById('statDailyAvg').innerText = '0,00 ₺';
+        document.getElementById('statDaysRange').innerText = 'Kayıt yok';
+      }
+
+      const now = new Date();
+      const monthlySpent = all.filter(e => {
+        const d = new Date(e.date);
+        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
+      }).reduce((acc, c) => acc + c.amount, 0);
+      const budgetGoal = window.state.monthlyBudget;
+      const budgetPct = Math.min(100, Math.round((monthlySpent / budgetGoal) * 100));
+
+      document.getElementById('budgetAmountDisplay').innerText = `${budgetGoal.toLocaleString('tr-TR')} ₺`;
+      const pBar = document.getElementById('budgetProgressBar');
+      pBar.style.width = `${budgetPct}%`;
+
+      const statusEl = document.getElementById('budgetStatusText');
+      if (budgetPct >= 100) {
+        pBar.className = 'h-full rounded-full transition-all duration-500 bg-rose-500';
+        statusEl.innerHTML = `<span class="text-rose-600 dark:text-rose-400">Bütçe aşıldı (%${budgetPct})</span>`;
+      } else if (budgetPct >= 80) {
+        pBar.className = 'h-full rounded-full transition-all duration-500 bg-amber-500';
+        statusEl.innerHTML = `<span class="text-amber-600 dark:text-amber-400">Bütçenin %${budgetPct}'i kullanıldı</span>`;
+      } else {
+        pBar.className = 'h-full rounded-full transition-all duration-500 bg-emerald-500';
+        statusEl.innerHTML = `<span class="text-emerald-600 dark:text-emerald-400">%${budgetPct} kullanıldı</span>`;
+      }
+
+      const remaining = budgetGoal - monthlySpent;
+      document.getElementById('budgetRemainingText').innerText = remaining >= 0
+        ? `Kalan: ${remaining.toLocaleString('tr-TR')} ₺`
+        : `Aşım: ${Math.abs(remaining).toLocaleString('tr-TR')} ₺`;
+
+      const listEl = document.getElementById('expenseList');
+      document.getElementById('itemCountBadge').innerText = `${filtered.length} kayıt`;
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = `
+          <tr><td colspan="7" class="px-5 py-14 text-center">
+            <div class="flex flex-col items-center gap-2 text-slate-400">
+              ${ico('inbox', 'w-6 h-6')}
+              <span class="text-sm">Seçilen filtrelere uygun harcama bulunamadı.</span>
+            </div>
+          </td></tr>`;
+      } else {
+        listEl.innerHTML = filtered.map(item => {
+          const cat = getCat(item.category);
+          const isU1 = item.paidBy === window.state.user1;
+          const typeBadge = item.type === 'Ortak'
+            ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300'
+            : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400';
+
+          return `
+            <tr class="hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors">
+              <td class="px-5 py-3 whitespace-nowrap text-slate-600 dark:text-slate-400 tabular-nums">${esc(item.date)}</td>
+              <td class="px-3 py-3">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-8 h-8 rounded-lg flex items-center justify-center shrink-0" style="background-color:${cat.color}1a;color:${cat.color}">${ico(cat.icon || 'tag', 'w-4 h-4')}</div>
+                  <div class="min-w-0">
+                    <p class="font-medium truncate">${esc(item.category)}</p>
+                    <p class="text-[11px] text-slate-500 dark:text-slate-400 truncate md:hidden">${esc(item.note || 'Açıklama yok')} · ${esc(item.paidBy)}</p>
+                  </div>
+                </div>
+              </td>
+              <td class="px-3 py-3 hidden md:table-cell text-slate-600 dark:text-slate-400 max-w-[16rem] truncate">${esc(item.note || '—')}</td>
+              <td class="px-3 py-3 hidden sm:table-cell">
+                <span class="inline-flex items-center gap-1.5 text-xs font-medium">
+                  <span class="w-1.5 h-1.5 rounded-full ${isU1 ? 'bg-indigo-500' : 'bg-teal-500'}"></span>${esc(item.paidBy)}
+                </span>
+              </td>
+              <td class="px-3 py-3 hidden sm:table-cell">
+                <span class="inline-block px-2 py-0.5 rounded-md text-[11px] font-medium ${typeBadge}">${esc(item.type)}</span>
+              </td>
+              <td class="px-3 py-3 text-right font-semibold tabular-nums whitespace-nowrap">${fmt(item.amount)} ₺</td>
+              <td class="px-3 py-3 text-right">
+                <button onclick="confirmDelete('${esc(item.id)}')" class="p-1.5 rounded-md text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-500/10 transition" title="Sil">${ico('trash-2', 'w-4 h-4')}</button>
+              </td>
+            </tr>`;
+        }).join('');
+      }
+
+      renderVsMatrix(filtered);
+      updateCharts(filtered, currentFilteredTotal);
+      refreshIcons();
+    }
+
+    function updateCharts(filteredExpenses, totalSum) {
+      if (window.state.activeView !== 'charts') {
+        if (categoryChartInstance) { categoryChartInstance.destroy(); categoryChartInstance = null; }
+        if (dayOfWeekChartInstance) { dayOfWeekChartInstance.destroy(); dayOfWeekChartInstance = null; }
+        return;
+      }
+      updateCategoryChart(filteredExpenses, totalSum);
+      updateTrendChart(filteredExpenses);
+    }
+
+    function updateCategoryChart(filteredExpenses, totalSum) {
+      const categoriesMap = {};
+      filteredExpenses.forEach(item => {
+        categoriesMap[item.category] = (categoriesMap[item.category] || 0) + item.amount;
+      });
+
+      const labels = Object.keys(categoriesMap);
+      const data = Object.values(categoriesMap);
+
+      const noDataMsg = document.getElementById('noDataCategoryMsg');
+      const breakdownList = document.getElementById('categoryBreakdownList');
+
+      if (labels.length === 0 || totalSum === 0) {
+        noDataMsg.classList.remove('hidden');
+        breakdownList.innerHTML = `<div class="text-xs text-slate-400 text-center py-4">Veri yok</div>`;
+        if (categoryChartInstance) { categoryChartInstance.destroy(); categoryChartInstance = null; }
+        return;
+      }
+      noDataMsg.classList.add('hidden');
+
+      const bgColors = labels.map(label => getCat(label).color);
+
+      breakdownList.innerHTML = labels.map(label => {
+        const val = categoriesMap[label];
+        const pct = ((val / totalSum) * 100).toFixed(1);
+        const cat = getCat(label);
+        return `
+          <div class="space-y-1.5">
+            <div class="flex items-center justify-between text-xs">
+              <span class="text-slate-700 dark:text-slate-300 font-medium flex items-center gap-1.5">
+                <span style="color:${cat.color}">${ico(cat.icon || 'tag', 'w-3.5 h-3.5')}</span>${esc(label)}
+              </span>
+              <span class="text-slate-500 dark:text-slate-400 tabular-nums">${fmt(val)} ₺ <span class="text-slate-400">· %${pct}</span></span>
+            </div>
+            <div class="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+              <div class="h-full rounded-full transition-all duration-500" style="width:${pct}%;background-color:${cat.color}"></div>
+            </div>
+          </div>`;
+      }).join('');
+
+      const ctx = document.getElementById('categoryChart').getContext('2d');
+      if (categoryChartInstance) categoryChartInstance.destroy();
+
+      categoryChartInstance = new Chart(ctx, {
+        type: 'doughnut',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: data,
+            backgroundColor: bgColors,
+            borderWidth: 2,
+            borderColor: window.state.theme === 'dark' ? '#0f172a' : '#ffffff'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          cutout: '72%'
+        }
+      });
+    }
+
+    function updateTrendChart(filteredExpenses) {
+      const dateMap = {};
+      filteredExpenses.forEach(item => {
+        dateMap[item.date] = (dateMap[item.date] || 0) + item.amount;
+      });
+
+      const sortedDates = Object.keys(dateMap).sort();
+      const labels = sortedDates.map(d => new Date(d).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }));
+      const data = sortedDates.map(d => dateMap[d]);
+
+      const noDataDayMsg = document.getElementById('noDataDayMsg');
+
+      if (labels.length === 0) {
+        noDataDayMsg.classList.remove('hidden');
+        if (dayOfWeekChartInstance) { dayOfWeekChartInstance.destroy(); dayOfWeekChartInstance = null; }
+        return;
+      }
+      noDataDayMsg.classList.add('hidden');
+
+      const ctx = document.getElementById('dayOfWeekChart').getContext('2d');
+      if (dayOfWeekChartInstance) dayOfWeekChartInstance.destroy();
+
+      const isDark = window.state.theme === 'dark';
+      const textColor = isDark ? '#94a3b8' : '#64748b';
+      const gridColor = isDark ? 'rgba(148,163,184,0.12)' : 'rgba(100,116,139,0.12)';
+
+      dayOfWeekChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Günlük tutar (TL)',
+            data: data,
+            backgroundColor: '#6366f1',
+            borderRadius: 4,
+            maxBarThickness: 28
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: { legend: { display: false } },
+          scales: {
+            x: { ticks: { color: textColor, font: { size: 10 } }, grid: { display: false }, border: { display: false } },
+            y: { ticks: { color: textColor, font: { size: 10 } }, grid: { color: gridColor }, border: { display: false } }
+          }
+        }
+      });
+    }
+
+    function showToast(message, icon = 'check-circle-2') {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMessage').innerText = message;
+      document.getElementById('toastIcon').innerHTML = ico(icon, 'w-4 h-4');
+      refreshIcons();
+
+      toast.classList.remove('translate-y-24', 'opacity-0');
+      clearTimeout(window.__toastTimer);
+      window.__toastTimer = setTimeout(() => {
+        toast.classList.add('translate-y-24', 'opacity-0');
+      }, 3000);
+    }
+
+    window.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('inputDate').value = localDateStr();
+
+      const savedCats = localStorage.getItem('custom_categories');
+      let cats = savedCats ? JSON.parse(savedCats) : [...DEFAULT_CATEGORIES];
+      cats = cats.map(c => {
+        if (!c.icon) c.icon = ICON_BY_DEFAULT_NAME[c.name] || 'tag';
+        delete c.emoji;
+        return c;
+      });
+      window.state.categories = cats;
+      localStorage.setItem('custom_categories', JSON.stringify(cats));
+
+      const savedTpls = localStorage.getItem('custom_templates');
+      window.state.recurringTemplates = savedTpls ? JSON.parse(savedTpls) : [...DEFAULT_RECURRING];
+
+      setExpenseType('Ortak');
+      setActiveUser(window.state.activeUser);
+      switchView('overview');
+      applyTheme();
+      initFirebase();
+    });
+  </script>
+</body>
+</html>
