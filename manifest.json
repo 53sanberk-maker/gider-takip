@@ -1,0 +1,20 @@
+{
+  "name": "Ortak Gider Takibi",
+  "short_name": "Gider Takip",
+  "start_url": "./?key=berkasya53",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#4f46e5",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/10174/10174037.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/10174/10174037.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
