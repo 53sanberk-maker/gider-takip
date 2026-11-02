@@ -667,24 +667,22 @@
     async function initFirebase() {
       const syncStatus = document.getElementById('syncStatus');
       try {
-        if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-          const firebaseConfig = JSON.parse(__firebase_config);
-          const app = initializeApp(firebaseConfig);
-          auth = getAuth(app);
-          db = getFirestore(app);
+        // Doğrudan senin Firebase projen:
+        const firebaseConfig = {
+          apiKey: "AIzaSyD4K-eNwMi_Tz2RaApY3jxBQh7IiQDyIiU",
+          authDomain: "gidertakip-8bcb1.firebaseapp.com",
+          projectId: "gidertakip-8bcb1",
+          storageBucket: "gidertakip-8bcb1.firebasestorage.app",
+          messagingSenderId: "128203978007",
+          appId: "1:128203978007:web:45c15da8f7b29315b4b352"
+        };
+        const app = initializeApp(firebaseConfig);
+        auth = getAuth(app);
+        db = getFirestore(app);
+        await signInAnonymously(auth);
 
-          if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-            await signInWithCustomToken(auth, __initial_auth_token);
-          } else {
-            await signInAnonymously(auth);
-          }
-
-          syncStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Bulutta senkronize';
-          subscribeToExpenses();
-        } else {
-          syncStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500"></span> Yerel depolama';
-          loadDemoData();
-        }
+        syncStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-emerald-500"></span> Bulutta senkronize';
+        subscribeToExpenses();
       } catch (err) {
         console.warn('Firebase init fallback:', err);
         syncStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-amber-500"></span> Yerel depolama';
