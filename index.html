@@ -666,6 +666,17 @@
 
     async function initFirebase() {
       const syncStatus = document.getElementById('syncStatus');
+      
+      // URL'de gizli anahtar kontrolü (Örn: ?key=berkvezasya2026)
+      const urlParams = new URLSearchParams(window.location.search);
+      const secretKey = urlParams.get('key');
+
+      if (secretKey !== 'berkasya53') {
+        syncStatus.innerHTML = '<span class="w-2 h-2 rounded-full bg-rose-500"></span> Yetkisiz Erişim!';
+        loadDemoData(); // Anahtar yoksa buluta bağlanmaz, verilerini korur
+        return;
+      }
+
       try {
         const firebaseConfig = {
           apiKey: "AIzaSyD4K-eNwMi_Tz2RaApY3jxBQh7IiQDyIiU",
@@ -677,9 +688,7 @@
         };
         const app = initializeApp(firebaseConfig);
         auth = getAuth(app);
-        
-        // BURASI DEĞİŞİYOR: (default) veritabanını açıkça belirtiyoruz
-        const { getFirestore, connectFirestoreEmulator } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
+        const { getFirestore } = await import("https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js");
         db = getFirestore(app, "(default)");
 
         await signInAnonymously(auth);
